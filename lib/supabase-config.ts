@@ -1,117 +1,35 @@
 import { createClient } from "@supabase/supabase-js"
+import type { Database } from "./database.types"
 
 // Types for our database
-export interface Database {
-  public: {
-    Tables: {
-      reports: {
-        Row: {
-          id: string
-          type: "bache" | "luz" | "basura" | "inseguridad" | "otro"
-          address: string
-          description: string
-          image_url: string | null
-          reporter_name: string | null
-          latitude: number
-          longitude: number
-          votes: number
-          status: "pending" | "in_progress" | "resolved" | "rejected"
-          priority: number
-          created_at: string
-          updated_at: string
-          resolved_at: string | null
-        }
-        Insert: {
-          id?: string
-          type: "bache" | "luz" | "basura" | "inseguridad" | "otro"
-          address: string
-          description: string
-          image_url?: string | null
-          reporter_name?: string | null
-          latitude: number
-          longitude: number
-          votes?: number
-          status?: "pending" | "in_progress" | "resolved" | "rejected"
-          priority?: number
-          created_at?: string
-          updated_at?: string
-          resolved_at?: string | null
-        }
-        Update: {
-          id?: string
-          type?: "bache" | "luz" | "basura" | "inseguridad" | "otro"
-          address?: string
-          description?: string
-          image_url?: string | null
-          reporter_name?: string | null
-          latitude?: number
-          longitude?: number
-          votes?: number
-          status?: "pending" | "in_progress" | "resolved" | "rejected"
-          priority?: number
-          created_at?: string
-          updated_at?: string
-          resolved_at?: string | null
-        }
-      }
-      report_votes: {
-        Row: {
-          id: string
-          report_id: string
-          voter_ip: string | null
-          voter_fingerprint: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          report_id: string
-          voter_ip?: string | null
-          voter_fingerprint?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          report_id?: string
-          voter_ip?: string | null
-          voter_fingerprint?: string | null
-          created_at?: string
-        }
-      }
-      report_comments: {
-        Row: {
-          id: string
-          report_id: string
-          comment: string
-          commenter_name: string | null
-          commenter_ip: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          report_id: string
-          comment: string
-          commenter_name?: string | null
-          commenter_ip?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          report_id?: string
-          comment?: string
-          commenter_name?: string | null
-          commenter_ip?: string | null
-          created_at?: string
-        }
-      }
-    }
-  }
+export type Tables = Database["public"]["Tables"]
+export type Enums = Database["public"]["Enums"]
+
+// Client-side Supabase client
+export const createClientComponentClient = () =>
+  createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+
+// Server-side Supabase client (for Route Handlers, Server Actions)
+// Ensure these are only used in server environments
+export const createServerComponentClient = () => {
+  // This is a placeholder. In a real Next.js app, you'd typically use
+  // `cookies()` from `next/headers` to get the session cookie for server components.
+  // For v0's Next.js environment, direct usage of env vars is common.
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key for server-side operations
+  )
 }
 
 // Create typed Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey)
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error("Missing Supabase URL or Anon Key environment variables.")
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 // Helper functions for common operations
 export const supabaseHelpers = {
@@ -134,7 +52,7 @@ export const supabaseHelpers = {
   },
 
   // Create a new report
-  async createReport(report: Database["public"]["Tables"]["reports"]["Insert"]) {
+  async createReport(report: Tables["reports"]["Insert"]) {
     const { data, error } = await supabase.from("reports").insert([report]).select()
 
     return { data, error }
@@ -267,5 +185,84 @@ export const supabaseHelpers = {
       .order("created_at", { ascending: true })
 
     return { data, error }
+  },
+
+  // Auth helpers
+  async signUpWithEmail(email: string, password: string, fullName?: string) {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+        },
+      },
+    })
+    return { data, error }
+  },
+
+  async signInWithEmail(email: string, password: string) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+    return { data, error }
+  },
+
+  async signOut() {
+    const { error } = await supabase.auth.signOut()
+    return { error }
+  },
+
+  async getCurrentUser() {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser()
+    if (error) return { user: null, profile: null, error }
+
+    if (user) {
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single()
+
+      if (profileError && profileError.code !== "PGRST116") {
+        // PGRST116 is "not found"
+        console.error("Error fetching profile:", profileError)
+        return { user, profile: null, error: profileError }
+      }
+      return { user, profile, error: null }
+    }
+    return { user: null, profile: null, error: null }
+  },
+
+  onAuthStateChange(callback: (event: string, session: any | null) => void) {
+    return supabase.auth.onAuthStateChange(callback)
+  },
+
+  // Admin specific helpers
+  async updateReportStatus(reportId: string, status: Tables["reports"]["Row"]["status"]) {
+    const { data, error } = await supabase
+      .from("reports")
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq("id", reportId)
+      .select()
+    return { data, error }
+  },
+
+  async updateReportPriority(reportId: string, priority: number) {
+    const { data, error } = await supabase
+      .from("reports")
+      .update({ priority, updated_at: new Date().toISOString() })
+      .eq("id", reportId)
+      .select()
+    return { data, error }
+  },
+
+  async deleteReport(reportId: string) {
+    const { error } = await supabase.from("reports").delete().eq("id", reportId)
+    return { error }
   },
 }

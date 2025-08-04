@@ -2,6 +2,7 @@
 DROP TABLE IF EXISTS report_comments CASCADE;
 DROP TABLE IF EXISTS report_votes CASCADE;
 DROP TABLE IF EXISTS reports CASCADE;
+DROP TABLE IF EXISTS profiles CASCADE; -- Add profiles table to drop
 DROP TYPE IF EXISTS problem_type CASCADE;
 
 -- Enable necessary extensions
@@ -12,20 +13,16 @@ CREATE TYPE problem_type AS ENUM ('bache', 'luz', 'basura', 'inseguridad', 'otro
 
 -- Create reports table
 CREATE TABLE reports (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  type problem_type NOT NULL,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  type TEXT NOT NULL,
   address TEXT NOT NULL,
-  description TEXT NOT NULL CHECK (length(description) <= 500),
+  description TEXT NOT NULL,
   image_url TEXT,
-  reporter_name VARCHAR(100),
-  latitude DECIMAL(10, 8) NOT NULL CHECK (latitude >= -90 AND latitude <= 90),
-  longitude DECIMAL(11, 8) NOT NULL CHECK (longitude >= -180 AND longitude <= 180),
-  votes INTEGER DEFAULT 0 CHECK (votes >= 0),
-  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'resolved', 'rejected')),
-  priority INTEGER DEFAULT 1 CHECK (priority >= 1 AND priority <= 5),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  resolved_at TIMESTAMP WITH TIME ZONE
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  votes INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'pending', -- 'pending', 'in_progress', 'resolved'
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create votes table to track individual votes
@@ -41,12 +38,21 @@ CREATE TABLE report_votes (
 
 -- Create comments table for reports
 CREATE TABLE report_comments (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  report_id UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-  comment TEXT NOT NULL CHECK (length(comment) <= 1000),
-  commenter_name VARCHAR(100),
-  commenter_ip INET,
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  report_id UUID REFERENCES reports(id) ON DELETE CASCADE NOT NULL,
+  comment_text TEXT NOT NULL,
+  commenter_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create profiles table for user metadata
+CREATE TABLE profiles (
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT,
+  is_admin BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create indexes for better performance
@@ -58,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_reports_coordinates ON reports(latitude, longitud
 CREATE INDEX IF NOT EXISTS idx_report_votes_report_id ON report_votes(report_id);
 CREATE INDEX IF NOT EXISTS idx_report_votes_fingerprint ON report_votes(voter_fingerprint);
 CREATE INDEX IF NOT EXISTS idx_report_comments_report_id ON report_comments(report_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -68,10 +75,17 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create trigger to automatically update updated_at
+-- Create trigger to automatically update updated_at for reports
 DROP TRIGGER IF EXISTS update_reports_updated_at ON reports;
 CREATE TRIGGER update_reports_updated_at
     BEFORE UPDATE ON reports
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Create trigger to automatically update updated_at for profiles
+DROP TRIGGER IF EXISTS update_profiles_updated_at ON profiles;
+CREATE TRIGGER update_profiles_updated_at
+    BEFORE UPDATE ON profiles
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
@@ -84,3 +98,19 @@ BEGIN
     WHERE id = report_id;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Function to create a public.profile entry when a new user signs up
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to call handle_new_user on auth.users inserts
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();

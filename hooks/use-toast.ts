@@ -2,15 +2,16 @@
 
 import * as React from "react"
 
-const TOAST_LIMIT = 3
-const TOAST_REMOVE_DELAY = 4000
+import type { ToastProps } from "@/components/toast"
 
-type ToasterToast = {
+const TOAST_LIMIT = 1
+const TOAST_REMOVE_DELAY = 1000000
+
+type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
-  variant?: "default" | "destructive"
-  open?: boolean
+  action?: React.ReactNode
 }
 
 const actionTypes = {
@@ -53,7 +54,7 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-const addToRemoveQueue = (toastId: string) => {
+const addTo = (toastId: string) => {
   if (toastTimeouts.has(toastId)) {
     return
   }
@@ -83,14 +84,14 @@ export const reducer = (state: State, action: Action): State => {
         toasts: state.toasts.map((t) => (t.id === action.toast.id ? { ...t, ...action.toast } : t)),
       }
 
-    case "DISMISS_TOAST": {
+    case "DISMISS_TOAST":
       const { toastId } = action
-
+      // ! Side effects !
       if (toastId) {
-        addToRemoveQueue(toastId)
+        addTo(toastId)
       } else {
         state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
+          addTo(toast.id)
         })
       }
 
@@ -105,7 +106,6 @@ export const reducer = (state: State, action: Action): State => {
             : t,
         ),
       }
-    }
     case "REMOVE_TOAST":
       if (action.toastId === undefined) {
         return {
@@ -120,15 +120,13 @@ export const reducer = (state: State, action: Action): State => {
   }
 }
 
-const listeners: Array<(state: State) => void> = []
+const listeners: ((state: State) => void)[] = []
 
 let memoryState: State = { toasts: [] }
 
 function dispatch(action: Action) {
   memoryState = reducer(memoryState, action)
-  listeners.forEach((listener) => {
-    listener(memoryState)
-  })
+  listeners.forEach((listener) => listener(memoryState))
 }
 
 type Toast = Omit<ToasterToast, "id">
@@ -149,13 +147,11 @@ function toast({ ...props }: Toast) {
       ...props,
       id,
       open: true,
+      onOpenChange: (open) => {
+        if (!open) dismiss()
+      },
     },
   })
-
-  // Auto-dismiss after delay
-  setTimeout(() => {
-    dismiss()
-  }, TOAST_REMOVE_DELAY)
 
   return {
     id: id,
@@ -180,7 +176,7 @@ function useToast() {
   return {
     ...state,
     toast,
-    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
+    dismiss: React.useCallback((toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }), []),
   }
 }
 

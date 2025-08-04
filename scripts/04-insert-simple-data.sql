@@ -79,6 +79,21 @@ INSERT INTO reports (type, address, description, reporter_name, latitude, longit
   -58.392,
   9,
   'pending'
+),
+(
+  'bache', 'Av. Corrientes 1234, CABA', 'Bache grande en el carril derecho, peligroso para vehículos.', -34.6037, -58.3816, 15, 'pending'
+),
+(
+  'luminaria', 'Calle Falsa 123, CABA', 'Luminaria pública quemada, la calle está muy oscura por la noche.', -34.595, -58.405, 8, 'in_progress'
+),
+(
+  'seguridad', 'Plaza San Martín, CABA', 'Robos frecuentes en la plaza, se necesita más presencia policial.', -34.5997, -58.3762, 22, 'resolved'
+),
+(
+  'limpieza', 'Rivadavia 5000, CABA', 'Acumulación de basura en la vereda, los contenedores están desbordados.', -34.615, -58.435, 10, 'pending'
+),
+(
+  'otro', 'Diagonal Norte 800, CABA', 'Árbol caído bloqueando parcialmente la vereda.', -34.601, -58.377, 5, 'pending'
 )
 ON CONFLICT (id) DO NOTHING;
 

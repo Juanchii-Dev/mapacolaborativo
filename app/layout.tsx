@@ -2,36 +2,30 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { Toaster } from "@/components/toast"
-import { SupabaseProvider } from "@/components/supabase-provider"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
+import { SupabaseAuthProvider } from "@/components/supabase-auth-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Mapa Colaborativo de Problemas Barriales",
-  description: "Reporta y visualiza problemas urbanos en tu barrio de forma colaborativa",
-  keywords: ["problemas urbanos", "barrio", "comunidad", "reportes", "mapa colaborativo"],
-  authors: [{ name: "Mapa Colaborativo Team" }],
-  openGraph: {
-    title: "Mapa Colaborativo de Problemas Barriales",
-    description: "Reporta y visualiza problemas urbanos en tu barrio de forma colaborativa",
-    type: "website",
-  },
+  title: "Mapa Colaborativo de Problemas",
+  description: "Reporta y visualiza problemas en tu vecindario",
     generator: 'v0.dev'
 }
 
 export default function RootLayout({
   children,
-}: {
+}: Readonly<{
   children: React.ReactNode
-}) {
+}>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <body className={inter.className}>
-        <SupabaseProvider>
-          {children}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <SupabaseAuthProvider>{children}</SupabaseAuthProvider>
           <Toaster />
-        </SupabaseProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

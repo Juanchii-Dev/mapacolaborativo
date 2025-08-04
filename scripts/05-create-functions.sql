@@ -101,6 +101,26 @@ EXCEPTION
 END;
 $$ LANGUAGE plpgsql;
 
+-- Function to increment report votes
+CREATE OR REPLACE FUNCTION increment_report_votes(report_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE reports
+    SET votes = votes + 1
+    WHERE id = report_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to decrement report votes (if needed for unvoting)
+CREATE OR REPLACE FUNCTION decrement_report_votes(report_id UUID)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE reports
+    SET votes = votes - 1
+    WHERE id = report_id;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Function to get trending reports (most voted in last 7 days)
 CREATE OR REPLACE FUNCTION get_trending_reports(limit_count INTEGER DEFAULT 10)
 RETURNS TABLE (

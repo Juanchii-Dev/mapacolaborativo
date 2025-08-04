@@ -1,390 +1,267 @@
 "use client"
 
-import type React from "react"
-
-import { useState } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useState, useEffect, type ChangeEvent } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Label } from "@/components/ui/label"
-import { MapPin, Upload, Search } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { Loader2 } from "lucide-react"
 import { geocodeAddress } from "@/lib/geocoding"
+import type { Report } from "@/app/page"
 
 interface ReportModalProps {
   isOpen: boolean
   onClose: () => void
-  onSubmit: (data: any) => void
+  onSubmit: (report: Omit<Report, "id" | "votes" | "status" | "created_at"> & { imageFile?: File | null }) => void
+  isSubmitting?: boolean
 }
 
-export default function ReportModal({ isOpen, onClose, onSubmit }: ReportModalProps) {
-  const [formData, setFormData] = useState({
-    type: "",
-    address: "",
-    description: "",
-    reporter_name: "",
-    image: null as File | null,
-    latitude: null as number | null,
-    longitude: null as number | null,
-  })
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isGettingLocation, setIsGettingLocation] = useState(false)
-  const [isGeocodingAddress, setIsGeocodingAddress] = useState(false)
-  const [errors, setErrors] = useState<{ [key: string]: string }>({})
+const reportTypes = [
+  "bache",
+  "luminaria",
+  "seguridad",
+  "limpieza",
+  "otro",
+  "árbol caído",
+  "inundación",
+  "ruido",
+  "basura",
+  "transporte",
+  "salud",
+  "educación",
+  "mascotas",
+  "infraestructura",
+  "servicios públicos",
+]
 
-  const problemTypes = [
-    { value: "bache", label: "Bache en la calle" },
-    { value: "luz", label: "Luminaria rota" },
-    { value: "basura", label: "Basura acumulada" },
-    { value: "inseguridad", label: "Problema de inseguridad" },
-    { value: "otro", label: "Otro problema" },
-  ]
+export default function ReportModal({ isOpen, onClose, onSubmit, isSubmitting = false }: ReportModalProps) {
+  const [type, setType] = useState<string>("")
+  const [address, setAddress] = useState<string>("")
+  const [description, setDescription] = useState<string>("")
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false)
+  const [latitude, setLatitude] = useState<number | null>(null)
+  const [longitude, setLongitude] = useState<number | null>(null)
+  const [locationError, setLocationError] = useState<string | null>(null)
 
-  const getCurrentLocation = () => {
-    setIsGettingLocation(true)
-
-    if (!navigator.geolocation) {
-      alert("La geolocalización no está disponible en tu navegador")
-      setIsGettingLocation(false)
-      return
+  useEffect(() => {
+    if (!isOpen) {
+      // Reset form when modal closes
+      setType("")
+      setAddress("")
+      setDescription("")
+      setImageFile(null)
+      setImagePreview(null)
+      setLatitude(null)
+      setLongitude(null)
+      setLocationError(null)
     }
+  }, [isOpen])
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      setImageFile(file)
+      setImagePreview(URL.createObjectURL(file))
+    } else {
+      setImageFile(null)
+      setImagePreview(null)
+    }
+  }
 
-        // Use reverse geocoding to get address
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+  const handleLocateMe = async () => {
+    setIsLoadingLocation(true)
+    setLocationError(null)
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords
+          setLatitude(latitude)
+          setLongitude(longitude)
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
+            )
+            const data = await response.json()
+            if (data.display_name) {
+              setAddress(data.display_name)
+            } else {
+              setAddress(`${latitude}, ${longitude}`)
+            }
+          } catch (error) {
+            console.error("Error geocoding reverse:", error)
+            setAddress(`${latitude}, ${longitude}`)
+            setLocationError("No se pudo obtener la dirección exacta.")
+          } finally {
+            setIsLoadingLocation(false)
+          }
+        },
+        (error) => {
+          console.error("Geolocation error:", error)
+          setLocationError(
+            "No se pudo obtener tu ubicación. Asegúrate de que los servicios de ubicación estén activados.",
           )
-          const data = await response.json()
-
-          setFormData((prev) => ({
-            ...prev,
-            address: data.display_name || `${latitude}, ${longitude}`,
-            latitude,
-            longitude,
-          }))
-        } catch (error) {
-          setFormData((prev) => ({
-            ...prev,
-            address: `${latitude}, ${longitude}`,
-            latitude,
-            longitude,
-          }))
-        }
-
-        setIsGettingLocation(false)
-      },
-      (error) => {
-        console.error("Error getting location:", error)
-        alert("No se pudo obtener tu ubicación. Verifica los permisos de ubicación.")
-        setIsGettingLocation(false)
-      },
-    )
+          setIsLoadingLocation(false)
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
+      )
+    } else {
+      setLocationError("La geolocalización no es compatible con tu navegador.")
+      setIsLoadingLocation(false)
+    }
   }
 
-  const handleAddressSearch = async () => {
-    if (!formData.address.trim()) {
-      alert("Ingresa una dirección para buscar")
+  const handleSubmit = async () => {
+    if (!type || !address || !description) {
+      setLocationError("Por favor, completa todos los campos obligatorios.")
       return
     }
 
-    setIsGeocodingAddress(true)
+    let finalLatitude = latitude
+    let finalLongitude = longitude
 
-    try {
-      const coordinates = await geocodeAddress(formData.address)
-      if (coordinates) {
-        setFormData((prev) => ({
-          ...prev,
-          latitude: coordinates.latitude,
-          longitude: coordinates.longitude,
-        }))
-        setErrors((prev) => ({ ...prev, location: "" }))
-      } else {
-        setErrors((prev) => ({ ...prev, location: "No se pudo encontrar la dirección. Verifica que sea correcta." }))
-      }
-    } catch (error) {
-      console.error("Error geocoding address:", error)
-      setErrors((prev) => ({ ...prev, location: "Error al buscar la dirección. Intenta nuevamente." }))
-    } finally {
-      setIsGeocodingAddress(false)
-    }
-  }
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert("La imagen es muy grande. El tamaño máximo es 5MB.")
-        return
-      }
-
-      // Validate file type
-      if (!file.type.startsWith("image/")) {
-        alert("Solo se permiten archivos de imagen.")
-        return
-      }
-
-      setFormData((prev) => ({ ...prev, image: file }))
-    }
-  }
-
-  const validateForm = () => {
-    const newErrors: { [key: string]: string } = {}
-
-    if (!formData.type) newErrors.type = "Selecciona el tipo de problema"
-    if (!formData.description.trim()) newErrors.description = "Describe el problema"
-    if (!formData.latitude || !formData.longitude) {
-      newErrors.location = "Obtén tu ubicación o busca una dirección válida"
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!validateForm()) return
-
-    setIsSubmitting(true)
-
-    try {
-      let imageUrl = null
-
-      // Upload image if exists
-      if (formData.image) {
-        const fileExt = formData.image.name.split(".").pop()
-        const fileName = `${Date.now()}.${fileExt}`
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("report-images")
-          .upload(fileName, formData.image)
-
-        if (uploadError) {
-          console.error("Error uploading image:", uploadError)
+    if (!finalLatitude || !finalLongitude) {
+      setIsLoadingLocation(true)
+      setLocationError(null)
+      try {
+        const coords = await geocodeAddress(address)
+        if (coords) {
+          finalLatitude = coords.latitude
+          finalLongitude = coords.longitude
         } else {
-          const {
-            data: { publicUrl },
-          } = supabase.storage.from("report-images").getPublicUrl(fileName)
-          imageUrl = publicUrl
+          setLocationError("No se pudo encontrar la ubicación para la dirección proporcionada.")
+          setIsLoadingLocation(false)
+          return
         }
+      } catch (error) {
+        console.error("Error geocoding address:", error)
+        setLocationError("Error al geocodificar la dirección. Intenta con una dirección más específica.")
+        setIsLoadingLocation(false)
+        return
+      } finally {
+        setIsLoadingLocation(false)
       }
-
-      await onSubmit({
-        type: formData.type,
-        address: formData.address.trim() || `${formData.latitude}, ${formData.longitude}`,
-        description: formData.description.trim(),
-        reporter_name: formData.reporter_name.trim() || null,
-        latitude: formData.latitude,
-        longitude: formData.longitude,
-        image_url: imageUrl,
-      })
-
-      // Reset form
-      setFormData({
-        type: "",
-        address: "",
-        description: "",
-        reporter_name: "",
-        image: null,
-        latitude: null,
-        longitude: null,
-      })
-      setErrors({})
-    } catch (error) {
-      console.error("Error submitting report:", error)
-      alert("Error al enviar el reporte. Intenta nuevamente.")
-    } finally {
-      setIsSubmitting(false)
     }
-  }
 
-  const resetForm = () => {
-    setFormData({
-      type: "",
-      address: "",
-      description: "",
-      reporter_name: "",
-      image: null,
-      latitude: null,
-      longitude: null,
+    onSubmit({
+      type,
+      address,
+      description,
+      imageFile,
+      latitude: finalLatitude!,
+      longitude: finalLongitude!,
     })
-    setErrors({})
-  }
-
-  const handleClose = () => {
-    resetForm()
-    onClose()
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="bg-[#121212] border-[#333] text-white max-w-md max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[500px] bg-[#1a1a1a] text-white border-[#333]">
         <DialogHeader>
-          <DialogTitle className="text-[#00BFFF]">Reportar un problema</DialogTitle>
+          <DialogTitle className="text-[#00BFFF]">Reportar un Problema</DialogTitle>
         </DialogHeader>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+        <div className="grid gap-4 py-4">
+          <div className="grid gap-2">
             <Label htmlFor="type" className="text-white">
-              Tipo de problema *
+              Tipo de Problema
             </Label>
-            <Select value={formData.type} onValueChange={(value) => setFormData((prev) => ({ ...prev, type: value }))}>
-              <SelectTrigger className="bg-[#1a1a1a] border-[#333] text-white">
-                <SelectValue placeholder="Selecciona el tipo de problema" />
+            <Select onValueChange={setType} value={type}>
+              <SelectTrigger id="type" className="bg-[#2a2a2a] text-white border-[#333]">
+                <SelectValue placeholder="Selecciona un tipo" />
               </SelectTrigger>
-              <SelectContent className="bg-[#1a1a1a] border-[#333]">
-                {problemTypes.map((type) => (
-                  <SelectItem key={type.value} value={type.value} className="text-white hover:bg-[#333]">
-                    {type.label}
+              <SelectContent className="bg-[#2a2a2a] text-white border-[#333]">
+                {reportTypes.map((t) => (
+                  <SelectItem key={t} value={t} className="hover:bg-[#3a3a3a]">
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {errors.type && <p className="text-red-400 text-xs mt-1">{errors.type}</p>}
           </div>
 
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="address" className="text-white">
-              Dirección (opcional)
+              Dirección
             </Label>
             <div className="flex gap-2">
               <Input
                 id="address"
-                value={formData.address}
-                onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
-                placeholder="Ej: Av. Corrientes 1234, Buenos Aires"
-                className="bg-[#1a1a1a] border-[#333] text-white placeholder:text-gray-400"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Ej: Av. Corrientes 1234"
+                className="flex-1 bg-[#2a2a2a] text-white border-[#333]"
               />
               <Button
-                type="button"
-                onClick={handleAddressSearch}
-                disabled={isGeocodingAddress || !formData.address.trim()}
-                className="bg-[#39FF14] hover:bg-[#2ECC11] text-black min-w-[44px]"
-                size="sm"
+                onClick={handleLocateMe}
+                disabled={isLoadingLocation}
+                variant="outline"
+                className="bg-[#3a3a3a] text-white border-[#00BFFF] hover:bg-[#00BFFF] hover:text-white"
               >
-                {isGeocodingAddress ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
-                ) : (
-                  <Search className="w-4 h-4" />
-                )}
+                {isLoadingLocation ? <Loader2 className="h-4 w-4 animate-spin" /> : "Mi Ubicación"}
               </Button>
             </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Ingresa una dirección y presiona buscar, o usa tu ubicación actual
-            </p>
+            {locationError && <p className="text-red-400 text-sm">{locationError}</p>}
           </div>
 
-          <div>
-            <Label className="text-white">Ubicación *</Label>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                onClick={getCurrentLocation}
-                disabled={isGettingLocation}
-                className="bg-[#00BFFF] hover:bg-[#0099CC] text-white flex-1"
-                size="sm"
-              >
-                {isGettingLocation ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Obteniendo...
-                  </>
-                ) : (
-                  <>
-                    <MapPin className="w-4 h-4 mr-2" />
-                    Usar mi ubicación
-                  </>
-                )}
-              </Button>
-            </div>
-            {formData.latitude && formData.longitude && (
-              <p className="text-xs text-green-400 mt-1">
-                ✓ Ubicación obtenida: {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
-              </p>
-            )}
-            {errors.location && <p className="text-red-400 text-xs mt-1">{errors.location}</p>}
-          </div>
-
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="description" className="text-white">
-              Descripción del problema *
+              Descripción
             </Label>
             <Textarea
               id="description"
-              value={formData.description}
-              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="Describe brevemente el problema que encontraste..."
-              className="bg-[#1a1a1a] border-[#333] text-white placeholder:text-gray-400"
-              rows={3}
-              maxLength={500}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe el problema en detalle..."
+              className="bg-[#2a2a2a] text-white border-[#333]"
             />
-            <p className="text-xs text-gray-400 mt-1">{formData.description.length}/500 caracteres</p>
-            {errors.description && <p className="text-red-400 text-xs mt-1">{errors.description}</p>}
           </div>
 
-          <div>
+          <div className="grid gap-2">
             <Label htmlFor="image" className="text-white">
-              Foto (opcional)
-            </Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="image"
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="bg-[#1a1a1a] border-[#333] text-white file:bg-[#00BFFF] file:text-white file:border-0 file:rounded file:px-2 file:py-1"
-              />
-              <Upload className="w-4 h-4 text-gray-400" />
-            </div>
-            <p className="text-xs text-gray-400 mt-1">Máximo 5MB. Formatos: JPG, PNG, GIF</p>
-            {formData.image && (
-              <p className="text-xs text-green-400 mt-1">✓ Imagen seleccionada: {formData.image.name}</p>
-            )}
-          </div>
-
-          <div>
-            <Label htmlFor="reporter_name" className="text-white">
-              Tu nombre (opcional)
+              Imagen (Opcional)
             </Label>
             <Input
-              id="reporter_name"
-              value={formData.reporter_name}
-              onChange={(e) => setFormData((prev) => ({ ...prev, reporter_name: e.target.value }))}
-              placeholder="Nombre del vecino"
-              className="bg-[#1a1a1a] border-[#333] text-white placeholder:text-gray-400"
-              maxLength={100}
+              id="image"
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="bg-[#2a2a2a] text-white border-[#333] file:text-white file:bg-[#00BFFF] file:hover:bg-[#0099CC]"
             />
-            <p className="text-xs text-gray-400 mt-1">Opcional. Ayuda a la comunidad a saber quién reportó.</p>
+            {imagePreview && (
+              <div className="mt-2 relative w-32 h-32 rounded-md overflow-hidden">
+                <img src={imagePreview || "/placeholder.svg"} alt="Preview" className="w-full h-full object-cover" />
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-1 right-1 h-6 w-6 rounded-full"
+                  onClick={() => {
+                    setImageFile(null)
+                    setImagePreview(null)
+                  }}
+                >
+                  X
+                </Button>
+              </div>
+            )}
           </div>
-
-          <div className="flex gap-2 pt-4">
-            <Button
-              type="button"
-              onClick={handleClose}
-              variant="outline"
-              className="flex-1 border-[#333] text-white hover:bg-[#1a1a1a] bg-transparent"
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSubmitting} className="flex-1 bg-[#00BFFF] hover:bg-[#0099CC] text-white">
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Enviando...
-                </>
-              ) : (
-                "Enviar reporte"
-              )}
-            </Button>
-          </div>
-        </form>
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || isLoadingLocation}
+            className="bg-[#00BFFF] hover:bg-[#0099CC] text-white w-full"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando...
+              </>
+            ) : (
+              "Enviar Reporte"
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

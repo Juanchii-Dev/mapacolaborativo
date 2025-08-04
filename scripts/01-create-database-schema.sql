@@ -8,15 +8,14 @@ CREATE TYPE problem_type AS ENUM ('bache', 'luz', 'basura', 'inseguridad', 'otro
 -- Create reports table
 CREATE TABLE IF NOT EXISTS reports (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  type problem_type NOT NULL,
+  type TEXT NOT NULL,
   address TEXT NOT NULL,
-  description TEXT NOT NULL CHECK (length(description) <= 500),
+  description TEXT NOT NULL,
   image_url TEXT,
-  reporter_name VARCHAR(100),
-  latitude DECIMAL(10, 8) NOT NULL CHECK (latitude >= -90 AND latitude <= 90),
-  longitude DECIMAL(11, 8) NOT NULL CHECK (longitude >= -180 AND longitude <= 180),
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
   votes INTEGER DEFAULT 0 CHECK (votes >= 0),
-  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'resolved', 'rejected')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'resolved', 'rejected')),
   priority INTEGER DEFAULT 1 CHECK (priority >= 1 AND priority <= 5),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -40,21 +39,17 @@ CREATE TABLE IF NOT EXISTS report_votes (
 CREATE TABLE IF NOT EXISTS report_comments (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   report_id UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-  comment TEXT NOT NULL CHECK (length(comment) <= 1000),
-  commenter_name VARCHAR(100),
-  commenter_ip INET,
+  comment_text TEXT NOT NULL CHECK (length(comment_text) <= 1000),
+  commenter_name TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create admin users table (optional for future admin features)
+-- Create admin users table (for managing reports)
 CREATE TABLE IF NOT EXISTS admin_users (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  name VARCHAR(100) NOT NULL,
-  role VARCHAR(20) DEFAULT 'admin' CHECK (role IN ('admin', 'moderator')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  last_login TIMESTAMP WITH TIME ZONE
+  id UUID PRIMARY KEY, -- This will link to auth.users.id
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create indexes for better performance

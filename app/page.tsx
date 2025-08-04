@@ -12,18 +12,14 @@ import Header from "@/components/header"
 import { supabase, supabaseHelpers } from "@/lib/supabase"
 import { generatePDF } from "@/lib/pdf-generator"
 import { sampleReports } from "@/lib/sample-data"
-import { toast } from "@/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/components/supabase-auth-provider"
+import AuthForm from "@/components/auth-form"
+import Loading from "./loading"
 
 const MapComponent = dynamic(() => import("@/components/map-component"), {
   ssr: false,
-  loading: () => (
-    <div className="w-full h-full bg-[#1a1a1a] flex items-center justify-center text-white rounded-lg">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00BFFF] mx-auto mb-2"></div>
-        <p className="text-sm">Cargando mapa...</p>
-      </div>
-    </div>
-  ),
+  loading: () => <Loading />,
 })
 
 export interface Report {
@@ -41,6 +37,8 @@ export interface Report {
 }
 
 export default function HomePage() {
+  const { user, isLoading: isAuthLoading } = useAuth()
+  const { toast } = useToast() // Correctly get the toast function
   const [reports, setReports] = useState<Report[]>([])
   const [filteredReports, setFilteredReports] = useState<Report[]>([])
   const [showReportModal, setShowReportModal] = useState(false)
@@ -48,7 +46,6 @@ export default function HomePage() {
   const [selectedReport, setSelectedReport] = useState<Report | null>(null)
   const [viewMode, setViewMode] = useState<"list" | "map" | "split">("list")
   const [isMapExpanded, setIsMapExpanded] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "offline" | "connecting">("connecting")
   const [filters, setFilters] = useState({
@@ -56,16 +53,38 @@ export default function HomePage() {
     zone: "",
   })
 
-  const loadReports = useCallback(async (showRefreshIndicator = false) => {
-    if (showRefreshIndicator) setIsRefreshing(true)
-    if (!showRefreshIndicator) setIsLoading(true)
+  const loadReports = useCallback(
+    async (showRefreshIndicator = false) => {
+      if (showRefreshIndicator) setIsRefreshing(true)
 
-    try {
-      setConnectionStatus("connecting")
-      const { data, error } = await supabaseHelpers.getAllReports()
+      try {
+        setConnectionStatus("connecting")
+        const { data, error } = await supabaseHelpers.getAllReports()
 
-      if (error) {
-        console.error("Error loading reports:", error)
+        if (error) {
+          console.error("Error loading reports:", error)
+          setReports(sampleReports)
+          setConnectionStatus("offline")
+          if (!showRefreshIndicator) {
+            toast({
+              title: "Modo offline",
+              description: "Mostrando datos de ejemplo. Verifica tu conexión.",
+              variant: "destructive",
+            })
+          }
+        } else {
+          const reportsData = data || []
+          setReports(reportsData.length > 0 ? reportsData : sampleReports)
+          setConnectionStatus("connected")
+          if (showRefreshIndicator && reportsData.length > 0) {
+            toast({
+              title: "Datos actualizados",
+              description: `Se cargaron ${reportsData.length} reportes.`,
+            })
+          }
+        }
+      } catch (error) {
+        console.error("Supabase connection error:", error)
         setReports(sampleReports)
         setConnectionStatus("offline")
         if (!showRefreshIndicator) {
@@ -75,67 +94,51 @@ export default function HomePage() {
             variant: "destructive",
           })
         }
-      } else {
-        const reportsData = data || []
-        setReports(reportsData.length > 0 ? reportsData : sampleReports)
-        setConnectionStatus("connected")
-        if (showRefreshIndicator && reportsData.length > 0) {
-          toast({
-            title: "Datos actualizados",
-            description: `Se cargaron ${reportsData.length} reportes.`,
-          })
-        }
+      } finally {
+        setIsRefreshing(false)
       }
-    } catch (error) {
-      console.error("Supabase connection error:", error)
-      setReports(sampleReports)
-      setConnectionStatus("offline")
-      if (!showRefreshIndicator) {
-        toast({
-          title: "Modo offline",
-          description: "Mostrando datos de ejemplo. Verifica tu conexión.",
-          variant: "destructive",
-        })
-      }
-    } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
-    }
-  }, [])
+    },
+    [toast],
+  )
 
   useEffect(() => {
-    loadReports()
+    if (!isAuthLoading) {
+      loadReports()
 
-    // Set up real-time subscription
-    let subscription: any = null
+      let subscription: any = null
 
-    const setupSubscription = async () => {
-      try {
-        subscription = supabase
-          .channel("reports_realtime")
-          .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, (payload) => {
-            console.log("Real-time update received:", payload)
-            loadReports(false) // Reload without showing refresh indicator
-          })
-          .subscribe((status) => {
-            console.log("Subscription status:", status)
-            if (status === "SUBSCRIBED") {
-              setConnectionStatus("connected")
-            }
-          })
-      } catch (error) {
-        console.error("Error setting up subscription:", error)
+      const setupSubscription = async () => {
+        try {
+          subscription = supabase
+            .channel("reports_realtime")
+            .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, (payload) => {
+              console.log("Real-time update received:", payload)
+              loadReports(false)
+            })
+            .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, (payload) => {
+              console.log("Real-time vote update received:", payload)
+              loadReports(false) // Reload reports to update vote counts
+            })
+            .subscribe((status) => {
+              console.log("Subscription status:", status)
+              if (status === "SUBSCRIBED") {
+                setConnectionStatus("connected")
+              }
+            })
+        } catch (error) {
+          console.error("Error setting up subscription:", error)
+        }
+      }
+
+      setupSubscription()
+
+      return () => {
+        if (subscription) {
+          subscription.unsubscribe()
+        }
       }
     }
-
-    setupSubscription()
-
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe()
-      }
-    }
-  }, [loadReports])
+  }, [loadReports, isAuthLoading])
 
   useEffect(() => {
     let filtered = reports
@@ -158,20 +161,19 @@ export default function HomePage() {
         address: reportData.address,
         description: reportData.description,
         image_url: reportData.image_url,
-        reporter_name: reportData.reporter_name,
         latitude: reportData.latitude,
         longitude: reportData.longitude,
-        votes: 0,
+        // reporter_name is now handled by user_id from auth
       })
 
       if (error) {
         console.error("Error creating report:", error)
-        // Add to local state as fallback
         const newReport: Report = {
           id: Date.now().toString(),
           ...reportData,
           votes: 0,
           created_at: new Date().toISOString(),
+          reporter_name: user?.email || "Anónimo", // Fallback for offline
         }
         setReports((prev) => [newReport, ...prev])
         toast({
@@ -184,9 +186,7 @@ export default function HomePage() {
           title: "¡Reporte enviado!",
           description: "Tu reporte ha sido publicado exitosamente.",
         })
-        // The real-time subscription will update the list automatically
       }
-
       setShowReportModal(false)
     } catch (error) {
       console.error("Error submitting report:", error)
@@ -199,49 +199,41 @@ export default function HomePage() {
   }
 
   const handleVote = async (reportId: string) => {
+    if (!user) {
+      toast({
+        title: "Inicia sesión para votar",
+        description: "Necesitas estar autenticado para votar por un reporte.",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
-      // Generate a simple fingerprint based on browser characteristics
-      const fingerprint = btoa(
-        `${navigator.userAgent}-${screen.width}x${screen.height}-${navigator.language}-${new Date().getDate()}`,
-      ).substring(0, 32)
-
-      const { data, error } = await supabaseHelpers.addVoteToReport(reportId, fingerprint)
-
-      if (error) {
-        console.error("Error voting:", error)
-
-        if (error.message?.includes("Ya has votado")) {
-          toast({
-            title: "Ya votaste",
-            description: "Ya registraste tu voto para este problema anteriormente.",
-            variant: "destructive",
-          })
-          return
-        }
-
-        // Update local state as fallback
-        setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, votes: r.votes + 1 } : r)))
-        toast({
-          title: "Voto registrado localmente",
-          description: "Tu voto se guardó en modo offline.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      if (data) {
-        toast({
-          title: "¡Voto registrado!",
-          description: "Gracias por reportar que este problema también te afecta.",
-        })
-        // Force refresh to get updated vote count
-        await loadReports(false)
-      } else {
+      const hasVoted = await supabaseHelpers.hasUserVoted(user.id, reportId)
+      if (hasVoted) {
         toast({
           title: "Ya votaste",
           description: "Ya registraste tu voto para este problema anteriormente.",
           variant: "destructive",
         })
+        return
+      }
+
+      const { data, error } = await supabaseHelpers.addVoteToReport(reportId, user.id)
+
+      if (error) {
+        console.error("Error voting:", error)
+        toast({
+          title: "Error al votar",
+          description: error.message || "No se pudo registrar tu voto. Intenta nuevamente.",
+          variant: "destructive",
+        })
+      } else if (data) {
+        toast({
+          title: "¡Voto registrado!",
+          description: "Gracias por reportar que este problema también te afecta.",
+        })
+        await loadReports(false) // Reload to update vote count
       }
     } catch (error) {
       console.error("Error voting:", error)
@@ -286,16 +278,12 @@ export default function HomePage() {
     loadReports(true)
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="text-center text-white">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00BFFF] mx-auto mb-4"></div>
-          <h2 className="text-xl font-semibold mb-2">Cargando aplicación...</h2>
-          <p className="text-gray-400">Preparando el mapa colaborativo</p>
-        </div>
-      </div>
-    )
+  if (isAuthLoading) {
+    return <Loading />
+  }
+
+  if (!user) {
+    return <AuthForm />
   }
 
   return (

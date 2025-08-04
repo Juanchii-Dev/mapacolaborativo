@@ -79,7 +79,17 @@ INSERT INTO reports (type, address, description, reporter_name, latitude, longit
   -58.392,
   9,
   'pending'
-);
+),
+('bache', 'Av. Corrientes 1234, CABA', 'Bache grande en el carril derecho, peligroso para vehículos.', -34.6037, -58.3816, 15, 'pending', 'Juan Pérez'),
+('luminaria', 'Calle Falsa 123, CABA', 'Luminaria pública quemada, la calle está muy oscura por la noche.', -34.595, -58.405, 8, 'in_progress', 'María García'),
+('seguridad', 'Plaza San Martín, CABA', 'Robos frecuentes en la plaza, se necesita más presencia policial.', -34.5997, -58.3762, 22, 'resolved', 'Pedro López'),
+('limpieza', 'Rivadavia 5000, CABA', 'Acumulación de basura en la vereda, los contenedores están desbordados.', -34.615, -58.435, 10, 'pending', 'Ana Fernández'),
+('otro', 'Diagonal Norte 800, CABA', 'Árbol caído bloqueando parcialmente la vereda.', -34.601, -58.377, 5, 'pending', 'Carlos Ruiz'),
+('inundación', 'Defensa 200, CABA', 'Calles inundadas después de lluvias leves, problemas de drenaje.', -34.608, -58.372, 18, 'in_progress', 'Laura Giménez'),
+('ruido', 'Santa Fe 2500, CABA', 'Ruido excesivo de un bar por las noches, afecta el descanso de los vecinos.', -34.589, -58.409, 9, 'pending', 'Roberto Castro'),
+('transporte', 'Estación Retiro, CABA', 'Problemas con la frecuencia de los colectivos en hora pico.', -34.591, -58.373, 12, 'pending', 'Sofía Torres'),
+('salud', 'Hospital Durand, CABA', 'Falta de insumos básicos en el hospital público.', -34.609, -58.423, 25, 'in_progress', 'Diego Morales'),
+('educación', 'Escuela N° 1, CABA', 'Problemas de infraestructura en la escuela, aulas sin calefacción.', -34.620, -58.390, 7, 'pending', 'Elena Gómez');
 
 -- Insert some sample comments
 INSERT INTO report_comments (report_id, comment, commenter_name) VALUES

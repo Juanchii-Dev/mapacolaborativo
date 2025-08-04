@@ -73,3 +73,27 @@ JOIN reports r ON rc.report_id = r.id
 WHERE rc.created_at >= NOW() - INTERVAL '24 hours'
 
 ORDER BY created_at DESC;
+
+-- Create a view for reports with aggregated data (e.g., vote count)
+CREATE OR REPLACE VIEW public.reports_with_details AS
+SELECT
+    r.id,
+    r.type,
+    r.address,
+    r.description,
+    r.image_url,
+    r.latitude,
+    r.longitude,
+    r.status,
+    r.created_at,
+    r.reporter_name,
+    r.user_id,
+    COUNT(rv.id) AS votes
+FROM
+    public.reports r
+LEFT JOIN
+    public.report_votes rv ON r.id = rv.report_id
+GROUP BY
+    r.id, r.type, r.address, r.description, r.image_url, r.latitude, r.longitude, r.status, r.created_at, r.reporter_name, r.user_id
+ORDER BY
+    r.created_at DESC;

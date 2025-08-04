@@ -1,12 +1,17 @@
--- Crear bucket para imágenes de reportes
+-- Create a storage bucket for report images
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('report-images', 'report-images', true)
+VALUES ('report_images', 'report_images', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Política para permitir subida de imágenes
-CREATE POLICY "Allow public upload" ON storage.objects
-  FOR INSERT WITH CHECK (bucket_id = 'report-images');
+-- Set up storage security policy
+CREATE POLICY "Allow public read access to report images" ON storage.objects
+FOR SELECT USING (bucket_id = 'report_images');
 
--- Política para permitir lectura de imágenes
-CREATE POLICY "Allow public read" ON storage.objects
-  FOR SELECT USING (bucket_id = 'report-images');
+CREATE POLICY "Allow authenticated inserts to report images" ON storage.objects
+FOR INSERT WITH CHECK (bucket_id = 'report_images' AND auth.uid() IS NOT NULL);
+
+CREATE POLICY "Allow authenticated updates to report images" ON storage.objects
+FOR UPDATE USING (bucket_id = 'report_images' AND auth.uid() IS NOT NULL);
+
+CREATE POLICY "Allow authenticated deletes to report images" ON storage.objects
+FOR DELETE USING (bucket_id = 'report_images' AND auth.uid() IS NOT NULL);
