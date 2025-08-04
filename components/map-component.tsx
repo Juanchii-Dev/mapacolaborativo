@@ -1,99 +1,152 @@
 "use client"
 
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from "react-leaflet"
-import "leaflet/dist/leaflet.css"
-import L from "leaflet"
-import { useEffect, useState, useRef } from "react"
-import type { Report } from "@/app/page"
 import { Button } from "@/components/ui/button"
-import { MapPin, ThumbsUp } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
-import { es } from "date-fns/locale"
 
-// Fix for default icon issue with Webpack
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+import { useEffect, useRef } from "react"
+import dynamic from "next/dynamic"
+import { type LatLngExpression, Icon, divIcon } from "leaflet"
+import { MapPin } from "lucide-react"
+import { renderToStaticMarkup } from "react-dom/server"
+
+// Fix for default Leaflet icon paths
+import "leaflet/dist/leaflet.css"
+import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css"
+import "leaflet-defaulticon-compatibility"
+
+// Dynamically import MapContainer and TileLayer from react-leaflet
+const DynamicMapContainer = dynamic(() => import("react-leaflet").then((mod) => mod.MapContainer), {
+  ssr: false,
 })
+const DynamicTileLayer = dynamic(() => import("react-leaflet").then((mod) => mod.TileLayer), {
+  ssr: false,
+})
+const DynamicMarker = dynamic(() => import("react-leaflet").then((mod) => mod.Marker), {
+  ssr: false,
+})
+const DynamicPopup = dynamic(() => import("react-leaflet").then((mod) => mod.Popup), {
+  ssr: false,
+})
+const DynamicCircle = dynamic(() => import("react-leaflet").then((mod) => mod.Circle), {
+  ssr: false,
+})
+const DynamicZoomControl = dynamic(() => import("react-leaflet").then((mod) => mod.ZoomControl), {
+  ssr: false,
+})
+
+interface Report {
+  id: string
+  type: string
+  address: string
+  description: string | null
+  image_url: string | null
+  latitude: number
+  longitude: number
+  created_at: string
+  status: "pending" | "in_progress" | "resolved"
+  votes: number
+  reporter_name: string | null
+  user_id: string | null
+}
 
 interface MapComponentProps {
   reports: Report[]
-  onReportClick: (report: Report) => void
-  initialCenter?: [number, number]
-  initialZoom?: number
+  onMarkerClick: (reportId: string) => void
+  center: LatLngExpression
+  zoom: number
+  showUserLocation?: boolean
+  userLocation?: LatLngExpression | null
+  radius?: number
 }
 
-function MapEvents({ onMapClick }: { onMapClick: (latlng: L.LatLng) => void }) {
-  useMapEvents({
-    click: (e) => {
-      onMapClick(e.latlng)
-    },
-  })
-  return null
-}
-
-export default function MapComponent({
+export function MapComponent({
   reports,
-  onReportClick,
-  initialCenter = [-34.6037, -58.3816],
-  initialZoom = 13,
+  onMarkerClick,
+  center,
+  zoom,
+  showUserLocation = false,
+  userLocation,
+  radius,
 }: MapComponentProps) {
-  const mapRef = useRef<L.Map | null>(null)
-  const [mapCenter, setMapCenter] = useState<[number, number]>(initialCenter)
-  const [mapZoom, setMapZoom] = useState(initialZoom)
+  const mapRef = useRef<any>(null)
 
   useEffect(() => {
-    if (mapRef.current && reports.length > 0) {
-      // Calculate bounds to fit all markers
-      const bounds = L.latLngBounds(reports.map((r) => [r.latitude, r.longitude]))
-      if (bounds.isValid()) {
-        mapRef.current.fitBounds(bounds, { padding: [50, 50] })
-      }
+    if (mapRef.current && userLocation) {
+      mapRef.current.setView(userLocation, mapRef.current.getZoom())
     }
-  }, [reports])
+  }, [userLocation])
 
-  const handleMapClick = (latlng: L.LatLng) => {
-    // This can be used for future features, e.g., placing a new report marker
-    console.log("Map clicked at:", latlng.lat, latlng.lng)
+  const createCustomIcon = (type: string) => {
+    const iconHtml = renderToStaticMarkup(
+      <div className="flex flex-col items-center">
+        <MapPin className="h-8 w-8 text-red-500" />
+        <span className="text-xs font-semibold text-gray-800 bg-white px-1 rounded-sm whitespace-nowrap">{type}</span>
+      </div>,
+    )
+    return new divIcon({
+      html: iconHtml,
+      className: "custom-map-pin",
+      iconSize: [32, 32], // Adjust size as needed
+      iconAnchor: [16, 32], // Point of the icon which will correspond to marker's location
+      popupAnchor: [0, -32], // Point from which the popup should open relative to the iconAnchor
+    })
   }
 
   return (
-    <MapContainer
-      center={mapCenter}
-      zoom={mapZoom}
+    <DynamicMapContainer
+      center={center}
+      zoom={zoom}
       scrollWheelZoom={true}
-      className="h-full w-full rounded-lg shadow-lg z-0"
-      ref={mapRef}
+      className="h-full w-full z-0"
+      whenCreated={(map) => (mapRef.current = map)}
+      zoomControl={false} // Disable default zoom control
     >
-      <TileLayer
+      <DynamicTileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <MapEvents onMapClick={handleMapClick} />
+      <DynamicZoomControl position="bottomright" /> {/* Custom position for zoom control */}
+      {showUserLocation && userLocation && (
+        <>
+          <DynamicMarker
+            position={userLocation}
+            icon={
+              new Icon({
+                iconUrl: "/placeholder-user.png", // Use a custom icon for user location
+                iconSize: [32, 32],
+                iconAnchor: [16, 32],
+                popupAnchor: [0, -32],
+              })
+            }
+          >
+            <DynamicPopup>Tu ubicación actual</DynamicPopup>
+          </DynamicMarker>
+          {radius && (
+            <DynamicCircle
+              center={userLocation}
+              radius={radius}
+              pathOptions={{ color: "blue", fillColor: "#3388ff", fillOpacity: 0.1 }}
+            />
+          )}
+        </>
+      )}
       {reports.map((report) => (
-        <Marker key={report.id} position={[report.latitude, report.longitude]}>
-          <Popup>
-            <div className="text-gray-900">
-              <h3 className="font-bold text-lg mb-1">{report.type}</h3>
-              <p className="text-sm mb-2">{report.address}</p>
-              <p className="text-xs text-gray-600 mb-2">
-                Reportado hace {formatDistanceToNow(new Date(report.created_at), { addSuffix: true, locale: es })}
-              </p>
-              <div className="flex items-center text-sm text-gray-700 mb-3">
-                <ThumbsUp className="w-4 h-4 mr-1 text-blue-500" /> {report.votes} votos
-              </div>
-              <Button
-                onClick={() => onReportClick(report)}
-                className="w-full bg-[#00BFFF] hover:bg-[#0099CC] text-white text-xs py-1 h-auto"
-              >
-                <MapPin className="w-3 h-3 mr-1" /> Ver Detalles
-              </Button>
-            </div>
-          </Popup>
-        </Marker>
+        <DynamicMarker
+          key={report.id}
+          position={[report.latitude, report.longitude]}
+          icon={createCustomIcon(report.type)}
+          eventHandlers={{
+            click: () => onMarkerClick(report.id),
+          }}
+        >
+          <DynamicPopup>
+            <div className="font-semibold">{report.type}</div>
+            <div>{report.address}</div>
+            <Button variant="link" className="p-0 h-auto" onClick={() => onMarkerClick(report.id)}>
+              Ver Detalles
+            </Button>
+          </DynamicPopup>
+        </DynamicMarker>
       ))}
-    </MapContainer>
+    </DynamicMapContainer>
   )
 }

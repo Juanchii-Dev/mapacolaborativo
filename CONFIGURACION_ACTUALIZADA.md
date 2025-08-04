@@ -1,105 +1,56 @@
-# Configuración Actualizada - Mapa Colaborativo
+# Configuración Actualizada del Proyecto
 
-## 🔧 Variables de Entorno
+Este documento detalla los cambios y la configuración necesaria para el proyecto "Mapa Colaborativo de Problemas" después de las últimas actualizaciones.
 
-Crea un archivo `.env.local` en la raíz del proyecto:
+## 1. Estructura de Clientes Supabase
 
-\`\`\`env
-NEXT_PUBLIC_SUPABASE_URL=tu_url_de_supabase_aqui
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_clave_anonima_aqui
-\`\`\`
+Hemos refactorizado la forma en que se inicializan y utilizan los clientes de Supabase para seguir las mejores prácticas de Next.js (App Router).
 
-## 📊 Configuración Simplificada de Supabase
+-   **`lib/supabase/client.ts`**: Contiene la inicialización del cliente Supabase para ser usado en **componentes de cliente** (`"use client"`). Este cliente utiliza las claves `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+-   **`lib/supabase/server.ts`**: Contiene la inicialización del cliente Supabase para ser usado en **Server Components, Route Handlers y Server Actions**. Este cliente utiliza la clave `SUPABASE_SERVICE_ROLE_KEY` para operaciones seguras en el servidor.
+-   **`lib/supabase.ts`**: Este archivo ahora actúa como un punto central para exportar las funciones `supabaseHelpers` que interactúan con la base de datos, utilizando internamente el cliente de Supabase del lado del cliente.
 
-### 1. Crear Proyecto
-1. Ve a [supabase.com](https://supabase.com)
-2. Crea una cuenta y un nuevo proyecto
-3. Anota la URL y la clave anónima del proyecto
+**Acción Requerida**: Asegúrate de que tus componentes importen el cliente correcto (`@/lib/supabase/client` o `@/lib/supabase/server`) según su entorno de ejecución.
 
-### 2. Ejecutar Scripts SQL Simplificados
-**¡IMPORTANTE!** Ejecuta estos scripts en el SQL Editor de Supabase **en el orden exacto** para asegurar que la base de datos se configure correctamente. El primer script ahora incluye sentencias para limpiar la base de datos antes de recrear las tablas.
+## 2. Políticas de Seguridad a Nivel de Fila (RLS)
 
-1. `scripts/01-create-simple-schema.sql` - Crea tablas básicas y funciones
-2. `scripts/02-create-simple-policies.sql` - Configura permisos RLS
-3. `scripts/03-create-simple-storage.sql` - Crea bucket de imágenes y sus políticas
-4. `scripts/04-insert-simple-data.sql` - Inserta datos de ejemplo
+El script de políticas RLS (`scripts/02-create-rls-policies.sql`) ha sido actualizado para ser **idempotente**. Esto significa que puedes ejecutarlo múltiples veces sin causar errores si las políticas ya existen.
 
-### 3. Verificar Configuración
-- Ve a "Table Editor" y verifica que las tablas se crearon:
-  - `reports`
-  - `report_votes`
-  - `report_comments`
-- Ve a "Storage" y verifica que el bucket "report-images" existe
+**Acción Requerida**: Vuelve a ejecutar el script `scripts/02-create-rls-policies.sql` en tu base de datos Supabase.
 
-## ✅ Problemas Solucionados
+## 3. Tipificación de la Base de Datos
 
-### 1. Errores de Esquema (Tablas y Columnas)
-- ❌ **Antes**: Errores como `relation "report_votes" does not exist` o `column "status" does not exist`.
-- ✅ **Ahora**: El script `01-create-simple-schema.sql` incluye `DROP TABLE IF EXISTS` y `DROP TYPE IF EXISTS` para asegurar una recreación limpia de la base de datos, resolviendo estos problemas de esquema.
+Se ha introducido el archivo `lib/database.types.ts` para proporcionar tipificación fuerte para las interacciones con tu base de datos Supabase.
 
-### 2. Sistema de Votos Simplificado
-- ✅ Verificación de votos existentes antes de insertar
-- ✅ Inserción en tabla `report_votes`
-- ✅ Actualización del contador en tabla `reports`
-- ✅ Manejo de errores con fallback local
+**Acción Requerida**: Si aún no lo has hecho, genera este archivo usando la CLI de Supabase. Puedes usar un comando similar a:
+`npx supabase gen types typescript --project-id "tu-id-de-proyecto" --schema public > lib/database.types.ts`
 
-### 3. Configuración Mínima
-- ✅ Solo 4 scripts SQL necesarios
-- ✅ Sin dependencias de extensiones complejas (excepto `uuid-ossp`)
-- ✅ Funciona con configuración básica de Supabase
-- ✅ Políticas RLS simplificadas
+## 4. Variables de Entorno
 
-## 🚀 Instalación Rápida
+Asegúrate de que las siguientes variables de entorno estén configuradas en tu entorno de desarrollo (`.env.local`) y en tu plataforma de despliegue (Vercel):
 
-\`\`\`bash
-# 1. Instalar dependencias
-npm install
+-   `NEXT_PUBLIC_SUPABASE_URL`
+-   `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+-   `SUPABASE_SERVICE_ROLE_KEY` (¡Importante: esta clave solo debe usarse en el servidor!)
 
-# 2. Configurar variables de entorno
-# Crear .env.local con las credenciales de Supabase
+## 5. Tablas y Funciones de la Base de Datos
 
-# 3. Ejecutar aplicación
-npm run dev
-\`\`\`
+Confirma que las siguientes tablas y funciones existen en tu esquema `public` de Supabase:
 
-## 🔍 Funcionalidades Verificadas
+-   **Tablas**: `reports`, `report_comments`, `report_votes`, `profiles`.
+-   **Funciones (RPC)**: `increment_report_votes`, `decrement_report_votes`.
+-   **Triggers**: `update_votes_count_trigger` en `report_votes`.
 
-- ✅ Crear reportes con geolocalización
-- ✅ Subir imágenes al storage
-- ✅ Votar en reportes (sin duplicados)
-- ✅ Filtrar reportes por tipo y zona
-- ✅ Ver detalles de reportes
-- ✅ Generar PDF con estadísticas
-- ✅ Actualizaciones en tiempo real
-- ✅ Modo offline con datos de ejemplo
+**Acción Requerida**: Si no estás seguro, puedes ejecutar los scripts SQL en el orden recomendado:
+1.  `scripts/01-create-database-schema.sql` (si es la primera vez)
+2.  `scripts/07-add-votes-table.sql`
+3.  `scripts/02-create-rls-policies.sql`
 
-## 🛠️ Troubleshooting
+## 6. Almacenamiento (Storage)
 
-### Si sigues teniendo errores de función:
-1. Asegúrate de haber ejecutado todos los scripts SQL en el orden indicado.
-2. Si la función `increment_report_votes` no se creó, puedes ejecutar solo esta parte:
+-   **Bucket**: Asegúrate de tener un bucket de almacenamiento llamado `report_images`.
+-   **Políticas RLS**: Configura las políticas de RLS para este bucket para permitir que los usuarios autenticados suban y lean imágenes.
 
-\`\`\`sql
-CREATE OR REPLACE FUNCTION increment_report_votes(report_id UUID)
-RETURNS void AS $$
-BEGIN
-    UPDATE reports
-    SET votes = votes + 1
-    WHERE id = report_id;
-END;
-$$ LANGUAGE plpgsql;
-\`\`\`
+---
 
-### Si los votos no funcionan:
-1. La aplicación está diseñada para funcionar incluso si la función SQL no está presente, usando un fallback a la actualización manual.
-2. Los votos se guardan en `report_votes` y el contador se actualiza en `reports`.
-
-## 📱 Características
-
-- **Fingerprinting**: Previene votos duplicados por dispositivo
-- **Tiempo real**: Actualizaciones automáticas con Supabase
-- **Offline**: Funciona con datos locales sin conexión
-- **Responsive**: Optimizado para móviles y desktop
-- **Seguro**: Políticas RLS para proteger datos
-
-La aplicación ahora es más robusta frente a errores de configuración de la base de datos.
+Con estos pasos, tu aplicación debería estar completamente configurada y funcionando correctamente.

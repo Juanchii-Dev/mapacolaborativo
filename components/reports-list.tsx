@@ -1,74 +1,66 @@
 "use client"
 
-import type { Report } from "@/app/page"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { ThumbsUp, MapPin } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
-import { es } from "date-fns/locale"
-import Image from "next/image"
+import { useState } from "react"
+import { supabaseHelpers } from "@/lib/supabase"
+import { useAuth } from "@/components/supabase-auth-provider"
+import { useToast } from "@/components/ui/use-toast" // Corrected import path for useToast
+
+interface Report {
+  id: string
+  type: string
+  address: string
+  description: string | null
+  image_url: string | null
+  latitude: number
+  longitude: number
+  created_at: string
+  status: "pending" | "in_progress" | "resolved"
+  votes: number
+  reporter_name: string | null
+  user_id: string | null
+}
 
 interface ReportsListProps {
   reports: Report[]
-  onReportClick: (report: Report) => void
-  onVote: (reportId: string) => void
+  isLoading: boolean
+  onReportUpdated: () => void
 }
 
-export default function ReportsList({ reports, onReportClick, onVote }: ReportsListProps) {
-  if (reports.length === 0) {
-    return (
-      <div className="text-center text-gray-400 py-8">No hay reportes que coincidan con los filtros aplicados.</div>
-    )
+export function ReportsList({ reports, isLoading, onReportUpdated }: ReportsListProps) {
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [votingStates, setVotingStates] = useState<{ [key: string]: boolean }>({}) // To track individual vote loading
+  const { user, isLoading: authLoading } = useAuth()
+  const { toast } = useToast()
+
+  const handleViewReport = (reportId: string) => {
+    setSelectedReportId(reportId)
+    setIsModalOpen(true)
   }
 
-  return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {reports.map((report) => (
-        <Card key={report.id} className="bg-[#1a1a1a] text-white border-[#333] flex flex-col">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-bold text-[#00BFFF]">{report.type}</CardTitle>
-            <p className="text-sm text-gray-300">{report.address}</p>
-          </CardHeader>
-          <CardContent className="flex-grow flex flex-col">
-            {report.image_url && (
-              <div className="relative w-full h-40 mb-3 rounded-md overflow-hidden">
-                <Image
-                  src={report.image_url || "/placeholder.svg"}
-                  alt={report.description || "Imagen del reporte"}
-                  layout="fill"
-                  objectFit="cover"
-                  className="rounded-md"
-                />
-              </div>
-            )}
-            <p className="text-sm text-gray-200 mb-3 line-clamp-3 flex-grow">{report.description}</p>
-            <div className="flex items-center justify-between text-xs text-gray-400 mb-3">
-              <span>
-                Reportado hace {formatDistanceToNow(new Date(report.created_at), { addSuffix: true, locale: es })}
-              </span>
-              {report.reporter_name && <span className="ml-auto">Por: {report.reporter_name}</span>}
-            </div>
-            <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#333]">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onVote(report.id)}
-                className="text-gray-300 hover:text-[#00BFFF] hover:bg-[#2a2a2a] flex items-center gap-1"
-              >
-                <ThumbsUp className="w-4 h-4" /> {report.votes} Votos
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onReportClick(report)}
-                className="text-gray-300 hover:text-[#39FF14] hover:bg-[#2a2a2a] flex items-center gap-1"
-              >
-                <MapPin className="w-4 h-4" /> Ver Detalles
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  )
-}
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedReportId(null)
+    onReportUpdated() // Refresh reports after modal closes (in case of changes like comments/votes)
+  }
+
+  const handleVote = async (reportId: string) => {
+    if (!user || authLoading) {
+      toast({
+        title: "Inicia sesión para votar",
+        description: "Necesitas iniciar sesión para poder votar por un reporte.",
+        variant: "warning",
+      })
+      return
+    }
+
+    if (votingStates[reportId]) return // Prevent double click
+
+    setVotingStates((prev) => ({ ...prev, [reportId]: true }))
+    try {
+      const hasVoted = await supabaseHelpers.hasUserVoted(user.id, reportId)
+      if (hasVoted) {
+        toast({
+          title: "Ya votaste",
+          description: "Ya has votado por este reporte.",
+          variant

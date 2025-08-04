@@ -1,114 +1,122 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { useState } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
+import { Slider } from "@/components/ui/slider"
+
+interface FilterOptions {
+  type: string
+  status: string
+  radius: number
+}
 
 interface FilterModalProps {
   isOpen: boolean
   onClose: () => void
-  filters: {
-    types: string[]
-    zone: string
-  }
-  onFiltersChange: (filters: { types: string[]; zone: string }) => void
+  onApplyFilters: (filters: FilterOptions) => void
+  currentFilters: FilterOptions
 }
 
-const reportTypes = [
-  "bache",
-  "luminaria",
-  "seguridad",
-  "limpieza",
-  "otro",
-  "árbol caído",
-  "inundación",
-  "ruido",
-  "basura",
-  "transporte",
-  "salud",
-  "educación",
-  "mascotas",
-  "infraestructura",
-  "servicios públicos",
-]
+export function FilterModal({ isOpen, onClose, onApplyFilters, currentFilters }: FilterModalProps) {
+  const [type, setType] = useState(currentFilters.type)
+  const [status, setStatus] = useState(currentFilters.status)
+  const [radius, setRadius] = useState(currentFilters.radius)
 
-export default function FilterModal({ isOpen, onClose, filters, onFiltersChange }: FilterModalProps) {
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(filters.types)
-  const [zoneInput, setZoneInput] = useState<string>(filters.zone)
-
-  useEffect(() => {
-    setSelectedTypes(filters.types)
-    setZoneInput(filters.zone)
-  }, [filters])
-
-  const handleTypeChange = (type: string, checked: boolean) => {
-    setSelectedTypes((prev) => (checked ? [...prev, type] : prev.filter((t) => t !== type)))
-  }
-
-  const handleApplyFilters = () => {
-    onFiltersChange({ types: selectedTypes, zone: zoneInput })
+  const handleApply = () => {
+    onApplyFilters({ type, status, radius })
     onClose()
   }
 
-  const handleClearFilters = () => {
-    setSelectedTypes([])
-    setZoneInput("")
-    onFiltersChange({ types: [], zone: "" })
+  const handleReset = () => {
+    setType("all")
+    setStatus("all")
+    setRadius(5000) // Default radius
+    onApplyFilters({ type: "all", status: "all", radius: 5000 })
     onClose()
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px] bg-[#1a1a1a] text-white border-[#333]">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="text-[#00BFFF]">Filtrar Reportes</DialogTitle>
+          <DialogTitle>Filtrar Reportes</DialogTitle>
+          <DialogDescription>Ajusta los filtros para encontrar reportes específicos.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          <div className="grid gap-2">
-            <Label htmlFor="zone" className="text-white">
-              Zona / Dirección
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="type" className="text-right">
+              Tipo
             </Label>
-            <Input
-              id="zone"
-              value={zoneInput}
-              onChange={(e) => setZoneInput(e.target.value)}
-              placeholder="Ej: Palermo, Av. Corrientes 123"
-              className="bg-[#2a2a2a] text-white border-[#333]"
-            />
+            <Select value={type} onValueChange={setType}>
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Selecciona un tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="Bache">Bache</SelectItem>
+                <SelectItem value="Falla de alumbrado">Falla de alumbrado</SelectItem>
+                <SelectItem value="Basura acumulada">Basura acumulada</SelectItem>
+                <SelectItem value="Vandalismo">Vandalismo</SelectItem>
+                <SelectItem value="Inundación">Inundación</SelectItem>
+                <SelectItem value="Otro">Otro</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <div className="grid gap-2">
-            <Label className="text-white">Tipo de Problema</Label>
-            <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2">
-              {reportTypes.map((type) => (
-                <div key={type} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`type-${type}`}
-                    checked={selectedTypes.includes(type)}
-                    onCheckedChange={(checked) => handleTypeChange(type, checked as boolean)}
-                    className="border-[#00BFFF] data-[state=checked]:bg-[#00BFFF] data-[state=checked]:text-white"
-                  />
-                  <Label htmlFor={`type-${type}`} className="capitalize text-white">
-                    {type}
-                  </Label>
-                </div>
-              ))}
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="status" className="text-right">
+              Estado
+            </Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="col-span-3">
+                <SelectValue placeholder="Selecciona un estado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="pending">Pendiente</SelectItem>
+                <SelectItem value="in_progress">En Progreso</SelectItem>
+                <SelectItem value="resolved">Resuelto</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="radius" className="text-right">
+              Radio (m)
+            </Label>
+            <div className="col-span-3 flex items-center gap-2">
+              <Slider
+                id="radius"
+                min={100}
+                max={10000}
+                step={100}
+                value={[radius]}
+                onValueChange={(val) => setRadius(val[0])}
+                className="w-[calc(100%-60px)]"
+              />
+              <Input
+                type="number"
+                value={radius}
+                onChange={(e) => setRadius(Number(e.target.value))}
+                className="w-16 text-center"
+              />
             </div>
           </div>
         </div>
-        <DialogFooter className="flex flex-col sm:flex-row sm:justify-between gap-2">
-          <Button
-            onClick={handleClearFilters}
-            variant="outline"
-            className="w-full sm:w-auto border-red-500 text-red-500 hover:bg-red-500 hover:text-white bg-transparent"
-          >
-            Limpiar Filtros
+        <DialogFooter>
+          <Button variant="outline" onClick={handleReset}>
+            Restablecer
           </Button>
-          <Button onClick={handleApplyFilters} className="w-full sm:w-auto bg-[#00BFFF] hover:bg-[#0099CC] text-white">
-            Aplicar Filtros
-          </Button>
+          <Button onClick={handleApply}>Aplicar Filtros</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

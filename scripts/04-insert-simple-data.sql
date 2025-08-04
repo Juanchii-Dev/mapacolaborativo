@@ -94,6 +94,15 @@ INSERT INTO reports (type, address, description, reporter_name, latitude, longit
 ),
 (
   'otro', 'Diagonal Norte 800, CABA', 'Árbol caído bloqueando parcialmente la vereda.', -34.601, -58.377, 5, 'pending'
+),
+(
+  'Bache', 'Calle Principal 123', 'Hay un bache grande en la calle.', 40.7128, -74.0060, NULL, NULL, 'pending'
+),
+(
+  'Falla de alumbrado', 'Avenida Central 456', 'Varias farolas no funcionan.', 40.7150, -74.0080, NULL, NULL, 'pending'
+),
+(
+  'Basura acumulada', 'Parque del Sol', 'Mucha basura en el parque.', 40.7100, -74.0050, NULL, NULL, 'pending'
 )
 ON CONFLICT (id) DO NOTHING;
 

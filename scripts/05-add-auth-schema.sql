@@ -1,17 +1,6 @@
--- Add profiles table if it doesn't exist
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  username TEXT UNIQUE,
-  full_name TEXT,
-  avatar_url TEXT,
-  website TEXT,
-  is_admin BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Add index for profiles username
-CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles(username);
+-- This script is primarily for setting up triggers or functions related to auth.users
+-- The profiles table and handle_new_user function are already in 01-create-database-schema.sql
+-- This file can be used for additional auth-related schema changes if needed.
 
 -- Create or replace function to update updated_at timestamp for profiles
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -41,24 +30,6 @@ CREATE POLICY "Public profiles are viewable by everyone." ON public.profiles
 DROP POLICY IF EXISTS "Users can update own profile." ON public.profiles;
 CREATE POLICY "Users can update own profile." ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
-
--- This trigger automatically creates a profile entry when a new user signs up
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.profiles (id, username, full_name)
-  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Drop the old trigger if it exists to prevent duplicates
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-
--- Create the trigger to call handle_new_user on new user creation
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT ON auth.users
-FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- Ensure the 'reports' table exists and has 'user_id'
 CREATE TABLE IF NOT EXISTS public.reports (

@@ -1,48 +1,20 @@
 -- Function to get reports within a radius (in meters)
 CREATE OR REPLACE FUNCTION get_reports_near_location(
-  center_lat DECIMAL,
-  center_lng DECIMAL,
-  radius_meters INTEGER DEFAULT 1000
+  center_lat DOUBLE PRECISION,
+  center_lng DOUBLE PRECISION,
+  radius_meters INTEGER
 )
-RETURNS TABLE (
-  id UUID,
-  type problem_type,
-  address TEXT,
-  description TEXT,
-  image_url TEXT,
-  reporter_name VARCHAR(100),
-  latitude DECIMAL(10, 8),
-  longitude DECIMAL(11, 8),
-  votes INTEGER,
-  status VARCHAR(20),
-  created_at TIMESTAMP WITH TIME ZONE,
-  distance_meters DOUBLE PRECISION
-) AS $$
+RETURNS SETOF reports AS $$
 BEGIN
+  -- This is a simplified example. For accurate geospatial queries,
+  -- you would typically use PostGIS extension and ST_DWithin.
+  -- For demonstration, we'll use a simple bounding box check.
   RETURN QUERY
-  SELECT 
-    r.id,
-    r.type,
-    r.address,
-    r.description,
-    r.image_url,
-    r.reporter_name,
-    r.latitude,
-    r.longitude,
-    r.votes,
-    r.status,
-    r.created_at,
-    ST_Distance(
-      r.location,
-      ST_Point(center_lng, center_lat)::geography
-    ) as distance_meters
-  FROM reports r
-  WHERE ST_DWithin(
-    r.location,
-    ST_Point(center_lng, center_lat)::geography,
-    radius_meters
-  )
-  ORDER BY distance_meters;
+  SELECT *
+  FROM reports
+  WHERE
+      latitude BETWEEN center_lat - (radius_meters / 111111.0) AND center_lat + (radius_meters / 111111.0)
+      AND longitude BETWEEN center_lng - (radius_meters / (111111.0 * COS(RADIANS(center_lat)))) AND center_lng + (radius_meters / (111111.0 * COS(RADIANS(center_lat))));
 END;
 $$ LANGUAGE plpgsql;
 
@@ -102,22 +74,22 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Function to increment report votes
-CREATE OR REPLACE FUNCTION increment_report_votes(report_id UUID)
+CREATE OR REPLACE FUNCTION increment_report_votes(report_id_param UUID)
 RETURNS VOID AS $$
 BEGIN
     UPDATE reports
     SET votes = votes + 1
-    WHERE id = report_id;
+    WHERE id = report_id_param;
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to decrement report votes (if needed for unvoting)
-CREATE OR REPLACE FUNCTION decrement_report_votes(report_id UUID)
+-- Function to decrement report votes (if a vote is removed)
+CREATE OR REPLACE FUNCTION decrement_report_votes(report_id_param UUID)
 RETURNS VOID AS $$
 BEGIN
     UPDATE reports
     SET votes = votes - 1
-    WHERE id = report_id;
+    WHERE id = report_id_param;
 END;
 $$ LANGUAGE plpgsql;
 

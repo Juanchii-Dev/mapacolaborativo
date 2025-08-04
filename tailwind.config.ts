@@ -53,6 +53,15 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Custom colors for status badges
+        success: {
+          DEFAULT: "hsl(142.1 76.2% 36.3%)", // A green color
+          foreground: "hsl(142.1 76.2% 96.3%)", // Light text for green
+        },
+        warning: {
+          DEFAULT: "hsl(48 96% 50%)", // An orange/yellow color
+          foreground: "hsl(48 96% 10%)", // Dark text for orange/yellow
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -68,15 +77,10 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        "caret-blink": {
-          "0%,70%,100%": { transform: "translateY(100%)" },
-          "20%": { transform: "translateY(0)" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "caret-blink": "caret-blink 1.25s ease-out infinite",
       },
     },
   },

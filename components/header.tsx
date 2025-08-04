@@ -1,66 +1,46 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { User2, LogOut } from "lucide-react"
+import Link from "next/link"
+import { MapPin, List, PlusCircle, Settings } from "lucide-react"
+import { UserMenu } from "@/components/user-menu"
 import { useAuth } from "@/components/supabase-auth-provider"
-import { ConnectionStatus } from "./connection-status"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import Image from "next/image"
 
-interface HeaderProps {
-  totalReports: number
-  activeFilters: number
-  connectionStatus: "connected" | "offline" | "connecting"
-}
-
-export default function Header({ totalReports, activeFilters, connectionStatus }: HeaderProps) {
-  const { user, signOut } = useAuth()
+export function Header() {
+  const { user, isLoading } = useAuth()
 
   return (
-    <header className="flex items-center justify-between p-4 bg-[#1a1a1a] border-b border-[#333] text-white relative z-10">
-      <ConnectionStatus status={connectionStatus} />
-      <h1 className="text-2xl font-bold text-[#00BFFF]">Mapa de Problemas</h1>
-      <div className="flex items-center gap-4">
-        <div className="text-sm text-gray-300 hidden sm:block">
-          {totalReports} Reportes {activeFilters > 0 && `(${activeFilters} filtros activos)`}
+    <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur-sm">
+      <div className="container flex h-16 items-center justify-between py-4">
+        <div className="flex items-center gap-4">
+          <Link href="/" className="flex items-center gap-2 font-semibold">
+            <Image src="/placeholder-logo.png" alt="Logo" width={24} height={24} />
+            <span className="hidden md:inline">Mapa de Problemas</span>
+          </Link>
+          <nav className="hidden md:flex items-center space-x-4">
+            <Link href="/" className="flex items-center gap-1 text-sm font-medium hover:underline">
+              <MapPin className="h-4 w-4" />
+              Mapa
+            </Link>
+            <Link href="/reports" className="flex items-center gap-1 text-sm font-medium hover:underline">
+              <List className="h-4 w-4" />
+              Reportes
+            </Link>
+            <Link href="/new-report" className="flex items-center gap-1 text-sm font-medium hover:underline">
+              <PlusCircle className="h-4 w-4" />
+              Nuevo Reporte
+            </Link>
+            {user && (
+              <Link href="/admin" className="flex items-center gap-1 text-sm font-medium hover:underline">
+                <Settings className="h-4 w-4" />
+                Admin
+              </Link>
+            )}
+          </nav>
         </div>
-        {user ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                <User2 className="h-5 w-5 text-white" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.email}</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user.user_metadata?.full_name || "Usuario"}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut}>
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Cerrar sesión</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button
-            variant="outline"
-            className="border-[#00BFFF] text-[#00BFFF] hover:bg-[#00BFFF] hover:text-white bg-transparent"
-          >
-            Iniciar Sesión
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <UserMenu />
+        </div>
       </div>
     </header>
   )

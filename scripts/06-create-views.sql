@@ -97,3 +97,5 @@ GROUP BY
     r.id, r.type, r.address, r.description, r.image_url, r.latitude, r.longitude, r.status, r.created_at, r.reporter_name, r.user_id
 ORDER BY
     r.created_at DESC;
+
+-- No complex views currently, but this file is a placeholder for future use.

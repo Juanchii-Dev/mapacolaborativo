@@ -1,149 +1,229 @@
 "use client"
 
-import { Label } from "@/components/ui/label"
-
-import { useEffect, useState, useCallback } from "react"
-import type { Report } from "@/app/page"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useToast } from "@/hooks/use-toast"
-import { format } from "date-fns"
-import { es } from "date-fns/locale"
-import { useAuth } from "@/components/supabase-auth-provider"
-import AuthForm from "@/components/auth-form"
-import Loading from "@/app/loading"
+import { useEffect, useState } from "react"
 import { supabaseHelpers } from "@/lib/supabase"
+import { useAuth } from "@/components/supabase-auth-provider"
+import { useRouter } from "next/navigation"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Loader2, Trash2, Eye } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast" // Corrected import path for useToast
+import { ViewReportModal } from "@/components/view-report-modal"
+
+interface Report {
+  id: string
+  type: string
+  address: string
+  description: string | null
+  image_url: string | null
+  latitude: number
+  longitude: number
+  created_at: string
+  status: "pending" | "in_progress" | "resolved"
+  votes: number
+  reporter_name: string | null
+  user_id: string | null
+}
 
 export default function AdminPage() {
-  const { user, isLoading: isAuthLoading } = useAuth()
-  const { toast } = useToast()
+  const { user, isLoading: authLoading } = useAuth()
+  const router = useRouter()
   const [reports, setReports] = useState<Report[]>([])
   const [isLoadingReports, setIsLoadingReports] = useState(true)
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const { toast } = useToast()
 
-  const fetchReports = useCallback(async () => {
+  useEffect(() => {
+    if (!authLoading && (!user || !user.user_metadata?.is_admin)) {
+      // Redirect if not authenticated or not an admin
+      router.push("/")
+      toast({
+        title: "Acceso Denegado",
+        description: "No tienes permisos para acceder a esta página.",
+        variant: "destructive",
+      })
+    } else if (user && user.user_metadata?.is_admin) {
+      fetchReports()
+    }
+  }, [user, authLoading, router, toast])
+
+  const fetchReports = async () => {
     setIsLoadingReports(true)
     const { data, error } = await supabaseHelpers.getAllReports()
-
     if (error) {
       console.error("Error fetching reports for admin:", error)
       toast({
         title: "Error",
-        description: "No se pudieron cargar los reportes para la administración.",
+        description: "No se pudieron cargar los reportes.",
         variant: "destructive",
       })
     } else {
       setReports(data || [])
     }
     setIsLoadingReports(false)
-  }, [toast])
-
-  useEffect(() => {
-    if (!isAuthLoading && user) {
-      fetchReports()
-    }
-  }, [fetchReports, isAuthLoading, user])
+  }
 
   const handleStatusChange = async (reportId: string, newStatus: string) => {
-    if (!user) {
-      toast({
-        title: "Acceso denegado",
-        description: "Debes iniciar sesión como administrador para cambiar el estado.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Basic check if user is an admin (this should be reinforced with RLS on Supabase)
-    // For a real app, you'd check a role or a specific admin table.
-    // For now, we'll assume any logged-in user can try, but RLS will prevent non-admins.
-
-    const { error } = await supabaseHelpers.updateReportStatus(reportId, newStatus)
-
+    const originalReports = [...reports]
+    setReports((prev) =>
+      prev.map((report) => (report.id === reportId ? { ...report, status: newStatus as Report["status"] } : report)),
+    )
+    const { data, error } = await supabaseHelpers.updateReportStatus(reportId, newStatus)
     if (error) {
       console.error("Error updating report status:", error)
+      setReports(originalReports) // Revert on error
       toast({
-        title: "Error al actualizar estado",
-        description: "No tienes permisos o hubo un problema al actualizar el estado.",
+        title: "Error",
+        description: "No se pudo actualizar el estado del reporte.",
         variant: "destructive",
       })
     } else {
       toast({
-        title: "Estado actualizado",
-        description: "El estado del reporte ha sido modificado.",
+        title: "Estado Actualizado",
+        description: `El estado del reporte ${reportId.substring(0, 8)}... ha sido actualizado a ${newStatus}.`,
       })
-      fetchReports() // Refresh reports to show updated status
     }
   }
 
-  if (isAuthLoading) {
-    return <Loading />
+  const handleDeleteReport = async (reportId: string) => {
+    if (!confirm("¿Estás seguro de que quieres eliminar este reporte? Esta acción es irreversible.")) {
+      return
+    }
+    const originalReports = [...reports]
+    setReports((prev) => prev.filter((report) => report.id !== reportId))
+    const { error } = await supabaseHelpers.deleteReport(reportId)
+    if (error) {
+      console.error("Error deleting report:", error)
+      setReports(originalReports) // Revert on error
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar el reporte.",
+        variant: "destructive",
+      })
+    } else {
+      toast({
+        title: "Reporte Eliminado",
+        description: `El reporte ${reportId.substring(0, 8)}... ha sido eliminado.`,
+      })
+    }
   }
 
-  if (!user) {
-    return <AuthForm /> // Redirect to auth if not logged in
+  const handleViewReport = (reportId: string) => {
+    setSelectedReportId(reportId)
+    setIsModalOpen(true)
   }
 
-  // In a real app, you'd check if the user has admin role here
-  // For this example, we'll just show the admin page if logged in.
-  // You should implement proper role-based access control.
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setSelectedReportId(null)
+    fetchReports() // Refresh reports after modal closes (in case of changes)
+  }
+
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "default"
+      case "in_progress":
+        return "secondary"
+      case "resolved":
+        return "success"
+      default:
+        return "default"
+    }
+  }
+
+  if (authLoading || (user && !user.user_metadata?.is_admin && !isLoadingReports)) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-gray-500" />
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white p-6">
-      <h1 className="text-3xl font-bold text-[#00BFFF] mb-6">Panel de Administración de Reportes</h1>
-
-      {isLoadingReports ? (
-        <Loading />
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {reports.length === 0 ? (
-            <p className="text-gray-400">No hay reportes para administrar.</p>
+    <div className="container mx-auto py-8">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-3xl font-bold">Panel de Administración de Reportes</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoadingReports ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
+              <span className="ml-2">Cargando reportes...</span>
+            </div>
+          ) : reports.length === 0 ? (
+            <p className="text-center text-gray-500">No hay reportes para mostrar.</p>
           ) : (
-            reports.map((report) => (
-              <Card key={report.id} className="bg-[#1a1a1a] text-white border-[#333]">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xl font-bold text-[#00BFFF]">{report.type}</CardTitle>
-                  <p className="text-sm text-gray-300">{report.address}</p>
-                </CardHeader>
-                <CardContent className="flex flex-col gap-3">
-                  <p className="text-sm text-gray-200 line-clamp-3">{report.description}</p>
-                  <div className="text-xs text-gray-400">
-                    <p>Reportado por: {report.reporter_name || "Anónimo"}</p>
-                    <p>Fecha: {format(new Date(report.created_at), "dd MMMM yyyy HH:mm", { locale: es })}</p>
-                    <p>Votos: {report.votes}</p>
-                  </div>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Label htmlFor={`status-${report.id}`} className="text-white">
-                      Estado:
-                    </Label>
-                    <Select
-                      value={report.status || "pending"}
-                      onValueChange={(value) => handleStatusChange(report.id, value)}
-                    >
-                      <SelectTrigger
-                        id={`status-${report.id}`}
-                        className="flex-1 bg-[#2a2a2a] text-white border-[#333]"
-                      >
-                        <SelectValue placeholder="Seleccionar estado" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#2a2a2a] text-white border-[#333]">
-                        <SelectItem value="pending" className="hover:bg-[#3a3a3a]">
-                          Pendiente
-                        </SelectItem>
-                        <SelectItem value="in_progress" className="hover:bg-[#3a3a3a]">
-                          En Progreso
-                        </SelectItem>
-                        <SelectItem value="resolved" className="hover:bg-[#3a3a3a]">
-                          Resuelto
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Dirección</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Votos</TableHead>
+                    <TableHead>Reportado por</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reports.map((report) => (
+                    <TableRow key={report.id}>
+                      <TableCell className="font-medium">{report.type}</TableCell>
+                      <TableCell>{report.address}</TableCell>
+                      <TableCell>
+                        <Select value={report.status} onValueChange={(value) => handleStatusChange(report.id, value)}>
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue placeholder="Estado" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">
+                              <Badge variant={getStatusBadgeVariant("pending")}>Pendiente</Badge>
+                            </SelectItem>
+                            <SelectItem value="in_progress">
+                              <Badge variant={getStatusBadgeVariant("in_progress")}>En Progreso</Badge>
+                            </SelectItem>
+                            <SelectItem value="resolved">
+                              <Badge variant={getStatusBadgeVariant("resolved")}>Resuelto</Badge>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>{report.votes}</TableCell>
+                      <TableCell>{report.reporter_name || "Anónimo"}</TableCell>
+                      <TableCell>{new Date(report.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="outline" size="icon" onClick={() => handleViewReport(report.id)}>
+                            <Eye className="h-4 w-4" />
+                            <span className="sr-only">Ver</span>
+                          </Button>
+                          <Button variant="destructive" size="icon" onClick={() => handleDeleteReport(report.id)}>
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Eliminar</span>
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
-        </div>
-      )}
+        </CardContent>
+      </Card>
+      <ViewReportModal
+        reportId={selectedReportId}
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        onReportUpdated={fetchReports} // Pass fetchReports to refresh list after update
+      />
     </div>
   )
 }

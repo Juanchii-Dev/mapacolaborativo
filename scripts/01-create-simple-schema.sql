@@ -12,17 +12,17 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TYPE problem_type AS ENUM ('bache', 'luz', 'basura', 'inseguridad', 'otro');
 
 -- Create reports table
-CREATE TABLE reports (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE IF NOT EXISTS reports (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type TEXT NOT NULL,
   address TEXT NOT NULL,
-  description TEXT NOT NULL,
+  description TEXT,
   image_url TEXT,
   latitude DOUBLE PRECISION NOT NULL,
   longitude DOUBLE PRECISION NOT NULL,
-  votes INTEGER DEFAULT 0,
-  status TEXT DEFAULT 'pending', -- 'pending', 'in_progress', 'resolved'
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  status TEXT DEFAULT 'pending' NOT NULL,
+  votes INTEGER DEFAULT 0 NOT NULL
 );
 
 -- Create votes table to track individual votes

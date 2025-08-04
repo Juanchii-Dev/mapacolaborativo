@@ -108,3 +108,9 @@ INSERT INTO report_comments (report_id, comment, commenter_name) VALUES
   'Ayer intentaron robarme aquí a las 9 PM. Necesitamos más iluminación urgente.',
   'Carlos M.'
 );
+
+-- Insert new sample reports for Springfield
+INSERT INTO reports (type, address, description, latitude, longitude, reporter_name, user_id) VALUES
+('Bache', 'Calle Falsa 123, Springfield', 'Gran bache en la calle principal, peligroso para ciclistas.', -34.6037, -58.3816, 'Juan Pérez', NULL),
+('Falla de alumbrado', 'Avenida Siempreviva 742, Springfield', 'Varias farolas no funcionan en esta avenida, muy oscuro por la noche.', -34.605, -58.385, 'María García', NULL),
+('Basura acumulada', 'Plaza Central, Springfield', 'Acumulación de basura cerca de los bancos, atrae plagas.', -34.602, -58.380, 'Carlos Ruiz', NULL);
